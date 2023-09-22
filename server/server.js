@@ -138,6 +138,7 @@ app.get("/getAccessToken", (req, res) => {
   res.json({ access_token: tokenData.access_token });
 });
 
+//get users top tracks
 app.get("/top-tracks", async (req, res) => {
   const range = req.query.range || "short_term"; // Default to short_term if range is not provided
 
@@ -168,6 +169,41 @@ app.get("/top-tracks", async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching top tracks:", error);
+    res.status(500).send({ error: "Internal server error" });
+  }
+});
+
+//get users top artists
+app.get("/top-artists", async (req, res) => {
+  const range = req.query.range || "short_term"; // Default to short_term if range is not provided
+
+  try {
+    // Use the access token stored in tokenData
+    const authOptions = {
+      url: "https://api.spotify.com/v1/me/top/artists",
+      qs: {
+        time_range: range,
+        limit: 10, // Limit to 10 artists, adjust as needed
+      },
+      headers: {
+        Authorization: "Bearer " + tokenData.access_token,
+      },
+      json: true,
+    };
+
+    // Make a GET request to the Spotify API to fetch top artists
+    request.get(authOptions, (error, response, body) => {
+      if (!error && response.statusCode === 200) {
+        const topArtists = body.items;
+        res.json(topArtists); // Send the top artists as a JSON response to the frontend
+      } else {
+        res
+          .status(response.statusCode)
+          .send({ error: "Failed to fetch top artists" });
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching top artists:", error);
     res.status(500).send({ error: "Internal server error" });
   }
 });

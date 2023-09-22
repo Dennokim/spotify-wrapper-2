@@ -2,24 +2,34 @@ import React, { useState, useEffect } from 'react';
 
 const Profile = () => {
   const [topTracks, setTopTracks] = useState([]);
+  const [topArtists, setTopArtists] = useState([]);
   const [range, setRange] = useState('short_term'); // Default time range
 
   useEffect(() => {
     // Function to fetch top tracks for the selected time range
-    const fetchTopTracks = async () => {
+    const fetchTopData = async () => {
       try {
-        const response = await fetch(`/top-tracks?range=${range}`);
-        if (response.ok) {
-          const data = await response.json();
+        //fetch top tracks
+        const trackResponse = await fetch(`/top-tracks?range=${range}`);
+        if (trackResponse.ok) {
+          const data = await trackResponse.json();
           setTopTracks(data);
         }
+
+        //fetch top artists
+        const artistResponse = await fetch(`/top-artists?range=${range}`);
+        if (artistResponse.ok){
+          const data = await artistResponse.json();
+          setTopArtists(data);
+        }
+
       } catch (error) {
         console.error('Error fetching top tracks:', error);
       }
     };
 
     // Call the fetchTopTracks function when the component mounts or when the time range changes
-    fetchTopTracks();
+    fetchTopData();
   }, [range]);
 
   return (
@@ -36,6 +46,13 @@ const Profile = () => {
       <ul>
         {topTracks.map((track, index) => (
           <li key={index}>{track.name}</li>
+        ))}
+      </ul>
+
+      <h2>Top Artist</h2>
+      <ul>
+        {topArtists.map((artist, index) => (
+          <li key={index}>{artist.name}</li>
         ))}
       </ul>
     </div>

@@ -21,19 +21,46 @@ async function main() {
     console.log("User Profile:", me.body);
 
     // Get the user's top tracks for different time ranges
-    const topTracks4Weeks = await spotifyApi.getMyTopTracks({ limit: 10, time_range: "short_term" });
+    const topTracks4Weeks = await spotifyApi.getMyTopTracks({
+      limit: 10,
+      time_range: "short_term",
+    });
     console.log("Top Tracks (4 weeks):", topTracks4Weeks.body.items);
 
-    const topTracks6Months = await spotifyApi.getMyTopTracks({ limit: 10, time_range: "medium_term" });
+    const topTracks6Months = await spotifyApi.getMyTopTracks({
+      limit: 10,
+      time_range: "medium_term",
+    });
     console.log("Top Tracks (6 months):", topTracks6Months.body.items);
 
-    const topTracksAllTime = await spotifyApi.getMyTopTracks({ limit: 10, time_range: "long_term" });
+    const topTracksAllTime = await spotifyApi.getMyTopTracks({
+      limit: 10,
+      time_range: "long_term",
+    });
     console.log("Top Tracks (All Time):", topTracksAllTime.body.items);
   } catch (error) {
     console.error("Error:", error);
+
+    //get the users top artists
+    const topArtists4Weeks = await spotifyApi.getMyTopArtists({
+      limit: 10,
+      time_range: "short_term",
+    });
+    console.log("Top Artists (4 weeks):", topArtists4Weeks.body.items);
+
+    const topArtists6Months = await spotifyApi.getMyTopArtists({
+      limit: 10,
+      time_range: "medium_term",
+    });
+    console.log("Top Artists (6 months):", topArtists6Months.body.items);
+
+    const topArtistsAllTime = await spotifyApi.getMyTopArtists({
+      limit: 10,
+      time_range: "long_term",
+    });
+    console.log("Top Artists (All Time):", topArtistsAllTime.body.items);
   }
 }
 
 // Call the main function to get user data and top tracks
 main();
-
