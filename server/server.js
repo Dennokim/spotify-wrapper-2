@@ -31,6 +31,12 @@ let STATE_KEY = "spotify_auth_state";
 // Set up the Express app
 const app = express();
 
+// Create an object to store tokens
+let tokenData = {
+  access_token: "",
+  refresh_token: "",
+};
+
 // Set up the middleware
 app.use(express.static(path.join(__dirname, "client", "build")));
 app.use(cors());
@@ -62,12 +68,13 @@ app.get("/login", (req, res) => {
     "user-follow-read",
     "user-follow-modify",
   ];
+
   res.redirect(
     "https://accounts.spotify.com/authorize?" +
       querystring.stringify({
         response_type: "code",
         client_id: client_id,
-        scope: scope,
+        scope: scope.join(" "),
         redirect_uri: redirect_uri,
         state: state,
       })
@@ -75,7 +82,7 @@ app.get("/login", (req, res) => {
 });
 
 // Route that Spotify redirects to after the user grants or denies permission
-app.get("/callback", async (req, res) => {
+app.get("/callback", (req, res) => {
   var code = req.query.code || null;
   var state = req.query.state || null;
   var storedState = req.cookies ? req.cookies[STATE_KEY] : null;
@@ -107,13 +114,12 @@ app.get("/callback", async (req, res) => {
 
     request.post(authOptions, async function (error, response, body) {
       if (!error && response.statusCode === 200) {
-        var access_token = body.access_token;
+        // Store the access token and refresh token in the tokenData object
+        tokenData.access_token = body.access_token;
+        tokenData.refresh_token = body.refresh_token;
 
-        // Log the access token
-        console.log("Access Token:", access_token);
-
-        // Redirect the user to the profile page with the access token
-        res.redirect(`/profile?access_token=${access_token}`);
+        // Redirect the user to the profile page
+        res.redirect("/profile");
       } else {
         res.redirect(
           "/#" +
@@ -126,35 +132,44 @@ app.get("/callback", async (req, res) => {
   }
 });
 
-// Route for refreshing the access token using the refresh token
-app.get("/refresh_token", function (req, res) {
-  var refresh_token = req.query.refresh_token;
-  var authOptions = {
-    url: "https://accounts.spotify.com/api/token",
-    headers: {
-      Authorization:
-        "Basic " +
-        Buffer.from(client_id + ":" + client_secret).toString("base64"),
-    },
-    form: {
-      grant_type: "refresh_token",
-      refresh_token: refresh_token,
-    },
-    json: true,
-  };
+// Route for getting the access token
+app.get("/getAccessToken", (req, res) => {
+  // Send the access token as JSON response
+  res.json({ access_token: tokenData.access_token });
+});
 
-  request.post(authOptions, function (error, response, body) {
-    if (!error && response.statusCode === 200) {
-      var access_token = body.access_token;
+app.get("/top-tracks", async (req, res) => {
+  const range = req.query.range || "short_term"; // Default to short_term if range is not provided
 
-      // Log the new access token obtained through the refresh token
-      console.log("Refreshed Access Token:", access_token);
+  try {
+    // Use the access token stored in tokenData
+    const authOptions = {
+      url: "https://api.spotify.com/v1/me/top/tracks",
+      qs: {
+        time_range: range,
+        limit: 10, // Limit to 10 tracks, adjust as needed
+      },
+      headers: {
+        Authorization: "Bearer " + tokenData.access_token,
+      },
+      json: true,
+    };
 
-      res.send({
-        access_token: access_token,
-      });
-    }
-  });
+    // Make a GET request to the Spotify API to fetch top tracks
+    request.get(authOptions, (error, response, body) => {
+      if (!error && response.statusCode === 200) {
+        const topTracks = body.items;
+        res.json(topTracks); // Send the top tracks as a JSON response to the frontend
+      } else {
+        res
+          .status(response.statusCode)
+          .send({ error: "Failed to fetch top tracks" });
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching top tracks:", error);
+    res.status(500).send({ error: "Internal server error" });
+  }
 });
 
 // Handle all other routes by serving the React app

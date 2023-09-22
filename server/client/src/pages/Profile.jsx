@@ -8,7 +8,7 @@ const Profile = () => {
     // Function to fetch top tracks for the selected time range
     const fetchTopTracks = async () => {
       try {
-        const response = await fetch(`/top-tracks/${range}`);
+        const response = await fetch(`/top-tracks?range=${range}`);
         if (response.ok) {
           const data = await response.json();
           setTopTracks(data);
