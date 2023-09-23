@@ -1,34 +1,30 @@
 import React, { useState, useEffect } from 'react';
 
 const Profile = () => {
-  const [topTracks, setTopTracks] = useState([]);
-  const [topArtists, setTopArtists] = useState([]);
+  const [topData, setTopData] = useState({
+    topTracks: [],
+    topArtists: [],
+    topAlbums: [],
+  });
   const [range, setRange] = useState('short_term'); // Default time range
 
   useEffect(() => {
-    // Function to fetch top tracks for the selected time range
+    // Function to fetch top data for the selected time range
     const fetchTopData = async () => {
       try {
-        //fetch top tracks
-        const trackResponse = await fetch(`/top-tracks?range=${range}`);
-        if (trackResponse.ok) {
-          const data = await trackResponse.json();
-          setTopTracks(data);
+        const response = await fetch(`/top-data?range=${range}`);
+        if (response.ok) {
+          const data = await response.json();
+          setTopData(data);
+        } else {
+          console.error('Failed to fetch top data');
         }
-
-        //fetch top artists
-        const artistResponse = await fetch(`/top-artists?range=${range}`);
-        if (artistResponse.ok){
-          const data = await artistResponse.json();
-          setTopArtists(data);
-        }
-
       } catch (error) {
-        console.error('Error fetching top tracks:', error);
+        console.error('Error fetching data:', error);
       }
     };
 
-    // Call the fetchTopTracks function when the component mounts or when the time range changes
+    // Call the fetchTopData function when the component mounts or when the time range changes
     fetchTopData();
   }, [range]);
 
@@ -43,18 +39,25 @@ const Profile = () => {
           <option value="long_term">All Time</option>
         </select>
       </div>
-      <ul>
-        {topTracks.map((track, index) => (
+      <ol>
+        {topData.topTracks.map((track, index) => (
           <li key={index}>{track.name}</li>
         ))}
-      </ul>
+      </ol>
 
-      <h2>Top Artist</h2>
-      <ul>
-        {topArtists.map((artist, index) => (
+      <h2>Top Artists</h2>
+      <ol>
+        {topData.topArtists.map((artist, index) => (
           <li key={index}>{artist.name}</li>
         ))}
-      </ul>
+      </ol>
+
+      <h2>Top Albums</h2>
+      <ol>
+        {topData.topAlbums.map((album, index) => (
+          <li key={index}>{album.name}</li>
+        ))}
+      </ol>
     </div>
   );
 };

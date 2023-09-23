@@ -138,12 +138,9 @@ app.get("/getAccessToken", (req, res) => {
   res.json({ access_token: tokenData.access_token });
 });
 
-//get users top tracks
-app.get("/top-tracks", async (req, res) => {
-  const range = req.query.range || "short_term"; // Default to short_term if range is not provided
-
-  try {
-    // Use the access token stored in tokenData
+// Function to fetch top tracks
+function fetchTopTracks(range) {
+  return new Promise((resolve, reject) => {
     const authOptions = {
       url: "https://api.spotify.com/v1/me/top/tracks",
       qs: {
@@ -156,29 +153,19 @@ app.get("/top-tracks", async (req, res) => {
       json: true,
     };
 
-    // Make a GET request to the Spotify API to fetch top tracks
     request.get(authOptions, (error, response, body) => {
       if (!error && response.statusCode === 200) {
-        const topTracks = body.items;
-        res.json(topTracks); // Send the top tracks as a JSON response to the frontend
+        resolve(body);
       } else {
-        res
-          .status(response.statusCode)
-          .send({ error: "Failed to fetch top tracks" });
+        reject({ error: "Failed to fetch top tracks" });
       }
     });
-  } catch (error) {
-    console.error("Error fetching top tracks:", error);
-    res.status(500).send({ error: "Internal server error" });
-  }
-});
+  });
+}
 
-//get users top artists
-app.get("/top-artists", async (req, res) => {
-  const range = req.query.range || "short_term"; // Default to short_term if range is not provided
-
-  try {
-    // Use the access token stored in tokenData
+// Function to fetch top artists
+function fetchTopArtists(range) {
+  return new Promise((resolve, reject) => {
     const authOptions = {
       url: "https://api.spotify.com/v1/me/top/artists",
       qs: {
@@ -191,20 +178,88 @@ app.get("/top-artists", async (req, res) => {
       json: true,
     };
 
-    // Make a GET request to the Spotify API to fetch top artists
     request.get(authOptions, (error, response, body) => {
       if (!error && response.statusCode === 200) {
-        const topArtists = body.items;
-        res.json(topArtists); // Send the top artists as a JSON response to the frontend
+        resolve(body);
       } else {
-        res
-          .status(response.statusCode)
-          .send({ error: "Failed to fetch top artists" });
+        reject({ error: "Failed to fetch top artists" });
       }
     });
+  });
+}
+
+// Function to analyze listening habits and get top albums
+function analyzeListeningHabits(topTracks) {
+  const albumCounts = {};
+
+  for (const track of topTracks) {
+    const albumId = track.album.id;
+    if (albumCounts[albumId]) {
+      albumCounts[albumId]++;
+    } else {
+      albumCounts[albumId] = 1;
+    }
+  }
+
+  // Convert the albumCounts object to an array and sort it by frequency
+  const sortedAlbums = Object.entries(albumCounts).sort((a, b) => b[1] - a[1]);
+
+  return sortedAlbums;
+}
+
+// Function to fetch album details by ID
+function fetchAlbumDetails(albumId) {
+  return new Promise((resolve, reject) => {
+    const authOptions = {
+      url: `https://api.spotify.com/v1/albums/${albumId}`,
+      headers: {
+        Authorization: "Bearer " + tokenData.access_token,
+      },
+      json: true,
+    };
+
+    request.get(authOptions, (error, response, body) => {
+      if (!error && response.statusCode === 200) {
+        resolve(body);
+      } else {
+        reject({ error: "Failed to fetch album details" });
+      }
+    });
+  });
+}
+
+// Route to get the user's top tracks, artists, and albums
+app.get("/top-data", async (req, res) => {
+  try {
+    const range = req.query.range || "short_term"; // Default to short_term if range is not provided
+
+    // Fetch top tracks, artists, and albums in parallel
+    const [topTracks, topArtists] = await Promise.all([
+      fetchTopTracks(range),
+      fetchTopArtists(range),
+    ]);
+
+    // Analyze listening habits to get top albums
+    const sortedAlbums = analyzeListeningHabits(topTracks.items);
+
+    // Fetch detailed information for the top albums
+    const topAlbums = [];
+    for (const [albumId] of sortedAlbums.slice(0, 10)) {
+      const albumDetailResponse = await fetchAlbumDetails(albumId);
+      if (!albumDetailResponse || albumDetailResponse.error) {
+        continue; // Skip if there's an error fetching album details
+      }
+      topAlbums.push(albumDetailResponse);
+    }
+
+    res.json({
+      topTracks: topTracks.items,
+      topArtists: topArtists.items,
+      topAlbums,
+    });
   } catch (error) {
-    console.error("Error fetching top artists:", error);
-    res.status(500).send({ error: "Internal server error" });
+    console.error("Error fetching top data:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
