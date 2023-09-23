@@ -138,6 +138,35 @@ app.get("/getAccessToken", (req, res) => {
   res.json({ access_token: tokenData.access_token });
 });
 
+//get users profile
+app.get("/user-profile", async (req, res) => {
+  try {
+    // Use the access token stored in tokenData
+    const authOptions = {
+      url: "https://api.spotify.com/v1/me",
+      headers: {
+        Authorization: "Bearer " + tokenData.access_token,
+      },
+      json: true,
+    };
+
+    // Make a GET request to the Spotify API to fetch user profile data
+    request.get(authOptions, (error, response, body) => {
+      if (!error && response.statusCode === 200) {
+        const userProfile = body;
+        res.json(userProfile); // Send the user profile data as a JSON response to the frontend
+      } else {
+        res
+          .status(response.statusCode)
+          .send({ error: "Failed to fetch user profile" });
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    res.status(500).send({ error: "Internal server error" });
+  }
+});
+
 // Function to fetch top tracks
 function fetchTopTracks(range) {
   return new Promise((resolve, reject) => {
