@@ -257,6 +257,32 @@ function fetchAlbumDetails(albumId) {
   });
 }
 
+// Function to fetch genres for a list of artist IDs
+function fetchGenresForArtists(artistIds) {
+  return new Promise((resolve, reject) => {
+    const authOptions = {
+      url: "https://api.spotify.com/v1/artists",
+      qs: {
+        ids: artistIds.join(","), // Comma-separated list of artist IDs
+      },
+      headers: {
+        Authorization: "Bearer " + tokenData.access_token,
+      },
+      json: true,
+    };
+
+    request.get(authOptions, (error, response, body) => {
+      if (!error && response.statusCode === 200) {
+        const artistData = body.artists;
+        const genres = artistData.map((artist) => artist.genres);
+        resolve(genres);
+      } else {
+        reject({ error: "Failed to fetch artist genres" });
+      }
+    });
+  });
+}
+
 // Route to get the user's top tracks, artists, and albums
 app.get("/top-data", async (req, res) => {
   try {
@@ -281,10 +307,47 @@ app.get("/top-data", async (req, res) => {
       topAlbums.push(albumDetailResponse);
     }
 
+    // Extract artist IDs from top tracks and artists
+    const topTrackArtistIds = topTracks.items.map(
+      (track) => track.artists[0].id
+    );
+    const topArtistIds = topArtists.items.map((artist) => artist.id);
+
+    // Combine both sets of artist IDs
+    const allArtistIds = [...new Set([...topTrackArtistIds, ...topArtistIds])];
+
+    // Fetch genres for the combined artist IDs
+    const artistGenres = await fetchGenresForArtists(allArtistIds);
+
+    // Flatten the array of artist genres
+    const allGenres = artistGenres.reduce(
+      (acc, genres) => acc.concat(genres),
+      []
+    );
+
+    // Count the occurrences of each genre
+    const genreCounts = {};
+    allGenres.forEach((genre) => {
+      if (genreCounts[genre]) {
+        genreCounts[genre]++;
+      } else {
+        genreCounts[genre] = 1;
+      }
+    });
+
+    // Sort the genres by count in descending order
+    const sortedGenres = Object.keys(genreCounts).sort(
+      (a, b) => genreCounts[b] - genreCounts[a]
+    );
+
+    // Get the top 5 genres
+    const top5Genres = sortedGenres.slice(0, 5);
+
     res.json({
       topTracks: topTracks.items,
       topArtists: topArtists.items,
       topAlbums,
+      artistGenres: top5Genres,
     });
   } catch (error) {
     console.error("Error fetching top data:", error);

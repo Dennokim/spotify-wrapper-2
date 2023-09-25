@@ -6,6 +6,7 @@ const Profile = () => {
     topTracks: [],
     topArtists: [],
     topAlbums: [],
+    artistGenres: [], // Added state to store top genres
   });
   const [range, setRange] = useState("short_term"); // Default time range
 
@@ -81,6 +82,13 @@ const Profile = () => {
           <ol>
             {topData.topAlbums.map((album, index) => (
               <li key={index}>{album.name}</li>
+            ))}
+          </ol>
+
+          <h2>Top Genres</h2>
+          <ol>
+            {topData.artistGenres.map((genre, index) => (
+              <li key={index}>{genre}</li>
             ))}
           </ol>
         </div>
