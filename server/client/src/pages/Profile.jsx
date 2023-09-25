@@ -26,8 +26,8 @@ const Profile = () => {
       }
     };
 
-    //fetch users data
-    const fetchUserData = async () => {
+    // Fetch user data and playlists in a single request
+    const fetchUserDataAndPlaylists = async () => {
       try {
         const response = await fetch("/user-profile");
         if (response.ok) {
@@ -41,9 +41,9 @@ const Profile = () => {
       }
     };
 
-    // Call the fetchTopData function when the component mounts or when the time range changes
+    // Call the fetchTopData and fetchUserDataAndPlaylists functions when the component mounts or when the time range changes
     fetchTopData();
-    fetchUserData();
+    fetchUserDataAndPlaylists();
   }, [range]);
 
   return (
@@ -55,6 +55,19 @@ const Profile = () => {
           <p>Followers: {userData.followers.total}</p>
           {/* Add user profile image here */}
           <img src={userData.images[0]?.url} alt="Profile" width="200" />
+
+          {/* Render playlists if available */}
+          {userData.playlists && (
+            <div>
+              <h2>User Playlists</h2>
+              <p>Total Playlists: {userData.totalPlaylists}</p>
+              <ul>
+                {userData.playlists.map((playlist, index) => (
+                  <li key={index}>{playlist.name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <h2>Top Tracks</h2>
           <div>

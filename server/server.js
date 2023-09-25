@@ -138,7 +138,7 @@ app.get("/getAccessToken", (req, res) => {
   res.json({ access_token: tokenData.access_token });
 });
 
-//get users profile
+//get users profile and playlists
 app.get("/user-profile", async (req, res) => {
   try {
     // Use the access token stored in tokenData
@@ -154,11 +154,33 @@ app.get("/user-profile", async (req, res) => {
     request.get(authOptions, (error, response, body) => {
       if (!error && response.statusCode === 200) {
         const userProfile = body;
-        res.json(userProfile); // Send the user profile data as a JSON response to the frontend
+        
+        // Now, fetch the user's playlists
+        const playlistsOptions = {
+          url: "https://api.spotify.com/v1/me/playlists",
+          headers: {
+            Authorization: "Bearer " + tokenData.access_token,
+          },
+          json: true,
+        };
+
+        // Make a GET request to the Spotify API to fetch user's playlists
+        request.get(playlistsOptions, (error, response, playlistsBody) => {
+          if (!error && response.statusCode === 200) {
+            const userPlaylists = playlistsBody.items;
+            const totalPlaylists = playlistsBody.total;
+            
+            // Add the user's playlists and total number of playlists to the user profile
+            userProfile.playlists = userPlaylists;
+            userProfile.totalPlaylists = totalPlaylists;
+            
+            res.json(userProfile); // Send the updated user profile data as a JSON response to the frontend
+          } else {
+            res.status(response.statusCode).send({ error: "Failed to fetch user playlists" });
+          }
+        });
       } else {
-        res
-          .status(response.statusCode)
-          .send({ error: "Failed to fetch user profile" });
+        res.status(response.statusCode).send({ error: "Failed to fetch user profile" });
       }
     });
   } catch (error) {
@@ -166,6 +188,7 @@ app.get("/user-profile", async (req, res) => {
     res.status(500).send({ error: "Internal server error" });
   }
 });
+
 
 // Function to fetch top tracks
 function fetchTopTracks(range) {
