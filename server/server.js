@@ -333,7 +333,7 @@ async function searchAlbums(query) {
   }
 }
 
-//Create Additional Routes for Details
+// Route to get details of a specific track by its ID
 app.get("/track/:id", async (req, res) => {
   try {
     const trackId = req.params.id;
@@ -345,6 +345,7 @@ app.get("/track/:id", async (req, res) => {
   }
 });
 
+// Route to get details of a specific artist by their ID
 app.get("/artist/:id", async (req, res) => {
   try {
     const artistId = req.params.id;
@@ -356,6 +357,7 @@ app.get("/artist/:id", async (req, res) => {
   }
 });
 
+// Route to get details of a specific album by its ID
 app.get("/album/:id", async (req, res) => {
   try {
     const albumId = req.params.id;
@@ -367,7 +369,7 @@ app.get("/album/:id", async (req, res) => {
   }
 });
 
-//Implement Detail Fetching Functions:
+// Route to get details of a specific track by its ID
 async function getTrackDetails(trackId) {
   try {
     const response = await spotifyApi.getTrack(trackId);
@@ -377,6 +379,7 @@ async function getTrackDetails(trackId) {
   }
 }
 
+// Route to get details of a specific artist by its ID
 async function getArtistDetails(artistId) {
   try {
     const [artist, topTracks, albums] = await Promise.all([
@@ -395,6 +398,7 @@ async function getArtistDetails(artistId) {
   }
 }
 
+// Route to get details of a specific album by its ID
 async function getAlbumDetails(albumId) {
   try {
     const response = await spotifyApi.getAlbum(albumId);
