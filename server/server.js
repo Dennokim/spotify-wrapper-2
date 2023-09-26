@@ -1,19 +1,30 @@
 const express = require("express");
-const request = require("request");
-const cors = require("cors");
-const querystring = require("querystring");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 const dotenv = require("dotenv");
+const SpotifyWebApi = require("spotify-web-api-node");
+const querystring = require("querystring");
 
 dotenv.config();
 
 // Spotify API credentials
-const client_id = process.env.SPOTIFY_CLIENT_ID;
-const client_secret = process.env.SPOTIFY_CLIENT_SECRET;
-const redirect_uri = process.env.SPOTIFY_CLIENT_REDIRECT;
+const spotifyApi = new SpotifyWebApi({
+  clientId: process.env.SPOTIFY_CLIENT_ID,
+  clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+  redirectUri: process.env.SPOTIFY_CLIENT_REDIRECT,
+});
 
-// Setting up a random state random generator
+// Cookie key for storing state
+let STATE_KEY = "spotify_auth_state";
+
+// Set up the Express app
+const app = express();
+
+// Set up the middleware
+app.use(express.static(path.join(__dirname, "client", "build")));
+app.use(cookieParser());
+
+// Function to generate a random string
 const generateRandomString = function (length) {
   var text = "";
   var possible =
@@ -24,23 +35,6 @@ const generateRandomString = function (length) {
   }
   return text;
 };
-
-// Cookie key for storing state
-let STATE_KEY = "spotify_auth_state";
-
-// Set up the Express app
-const app = express();
-
-// Create an object to store tokens
-let tokenData = {
-  access_token: "",
-  refresh_token: "",
-};
-
-// Set up the middleware
-app.use(express.static(path.join(__dirname, "client", "build")));
-app.use(cors());
-app.use(cookieParser());
 
 // Route for initiating the Spotify login process
 app.get("/login", (req, res) => {
@@ -69,20 +63,11 @@ app.get("/login", (req, res) => {
     "user-follow-modify",
   ];
 
-  res.redirect(
-    "https://accounts.spotify.com/authorize?" +
-      querystring.stringify({
-        response_type: "code",
-        client_id: client_id,
-        scope: scope.join(" "),
-        redirect_uri: redirect_uri,
-        state: state,
-      })
-  );
+  res.redirect(spotifyApi.createAuthorizeURL(scope, state));
 });
 
 // Route that Spotify redirects to after the user grants or denies permission
-app.get("/callback", (req, res) => {
+app.get("/callback", async (req, res) => {
   var code = req.query.code || null;
   var state = req.query.state || null;
   var storedState = req.cookies ? req.cookies[STATE_KEY] : null;
@@ -97,151 +82,85 @@ app.get("/callback", (req, res) => {
   } else {
     res.clearCookie(STATE_KEY);
 
-    var authOptions = {
-      url: "https://accounts.spotify.com/api/token",
-      form: {
-        code: code,
-        redirect_uri: redirect_uri,
-        grant_type: "authorization_code",
-      },
-      headers: {
-        Authorization:
-          "Basic " +
-          Buffer.from(client_id + ":" + client_secret).toString("base64"),
-      },
-      json: true,
-    };
+    try {
+      const data = await spotifyApi.authorizationCodeGrant(code);
 
-    request.post(authOptions, async function (error, response, body) {
-      if (!error && response.statusCode === 200) {
-        // Store the access token and refresh token in the tokenData object
-        tokenData.access_token = body.access_token;
-        tokenData.refresh_token = body.refresh_token;
+      // Set the access token and refresh token in the Spotify API object
+      spotifyApi.setAccessToken(data.body.access_token);
+      spotifyApi.setRefreshToken(data.body.refresh_token);
 
-        // Redirect the user to the profile page
-        res.redirect("/profile");
-      } else {
-        res.redirect(
-          "/#" +
-            querystring.stringify({
-              error: "invalid_token",
-            })
-        );
-      }
-    });
+      // Redirect the user to the profile page
+      res.redirect("/profile");
+    } catch (error) {
+      res.redirect(
+        "/#" +
+          querystring.stringify({
+            error: "invalid_token",
+            message: error.message, // Pass the error message to the frontend
+          })
+      );
+    }
   }
 });
 
 // Route for getting the access token
 app.get("/getAccessToken", (req, res) => {
   // Send the access token as JSON response
-  res.json({ access_token: tokenData.access_token });
+  res.json({ access_token: spotifyApi.getAccessToken() });
 });
 
 //get users profile and playlists
 app.get("/user-profile", async (req, res) => {
   try {
-    // Use the access token stored in tokenData
-    const authOptions = {
-      url: "https://api.spotify.com/v1/me",
-      headers: {
-        Authorization: "Bearer " + tokenData.access_token,
-      },
-      json: true,
-    };
+    const userProfile = await spotifyApi.getMe();
 
-    // Make a GET request to the Spotify API to fetch user profile data
-    request.get(authOptions, (error, response, body) => {
-      if (!error && response.statusCode === 200) {
-        const userProfile = body;
-        
-        // Now, fetch the user's playlists
-        const playlistsOptions = {
-          url: "https://api.spotify.com/v1/me/playlists",
-          headers: {
-            Authorization: "Bearer " + tokenData.access_token,
-          },
-          json: true,
-        };
+    // Now, fetch the user's playlists
+    const userPlaylists = await spotifyApi.getUserPlaylists(
+      userProfile.body.id
+    );
+    const totalPlaylists = userPlaylists.body.total;
 
-        // Make a GET request to the Spotify API to fetch user's playlists
-        request.get(playlistsOptions, (error, response, playlistsBody) => {
-          if (!error && response.statusCode === 200) {
-            const userPlaylists = playlistsBody.items;
-            const totalPlaylists = playlistsBody.total;
-            
-            // Add the user's playlists and total number of playlists to the user profile
-            userProfile.playlists = userPlaylists;
-            userProfile.totalPlaylists = totalPlaylists;
-            
-            res.json(userProfile); // Send the updated user profile data as a JSON response to the frontend
-          } else {
-            res.status(response.statusCode).send({ error: "Failed to fetch user playlists" });
-          }
-        });
-      } else {
-        res.status(response.statusCode).send({ error: "Failed to fetch user profile" });
-      }
-    });
+    // Add the user's playlists and total number of playlists to the user profile
+    userProfile.body.playlists = userPlaylists.body.items;
+    userProfile.body.totalPlaylists = totalPlaylists;
+
+    res.json(userProfile.body); // Send the updated user profile data as a JSON response to the frontend
   } catch (error) {
     console.error("Error fetching user profile:", error);
     res.status(500).send({ error: "Internal server error" });
   }
 });
 
-
-// Function to fetch top tracks
-function fetchTopTracks(range) {
-  return new Promise((resolve, reject) => {
-    const authOptions = {
-      url: "https://api.spotify.com/v1/me/top/tracks",
-      qs: {
-        time_range: range,
-        limit: 10, // Limit to 10 tracks, adjust as needed
-      },
-      headers: {
-        Authorization: "Bearer " + tokenData.access_token,
-      },
-      json: true,
-    };
-
-    request.get(authOptions, (error, response, body) => {
-      if (!error && response.statusCode === 200) {
-        resolve(body);
-      } else {
-        reject({ error: "Failed to fetch top tracks" });
-      }
+// Function to fetch top tracks using SpotifyWebApi
+async function fetchTopTracks(range) {
+  try {
+    const response = await spotifyApi.getMyTopTracks({
+      time_range: range,
+      limit: 10,
     });
-  });
+
+    return response.body.items; // Return the items array from the response
+  } catch (error) {
+    throw { error: "Failed to fetch top tracks" };
+  }
 }
 
-// Function to fetch top artists
-function fetchTopArtists(range) {
-  return new Promise((resolve, reject) => {
-    const authOptions = {
-      url: "https://api.spotify.com/v1/me/top/artists",
-      qs: {
-        time_range: range,
-        limit: 10, // Limit to 10 artists, adjust as needed
-      },
-      headers: {
-        Authorization: "Bearer " + tokenData.access_token,
-      },
-      json: true,
-    };
-
-    request.get(authOptions, (error, response, body) => {
-      if (!error && response.statusCode === 200) {
-        resolve(body);
-      } else {
-        reject({ error: "Failed to fetch top artists" });
-      }
+// Function to fetch top artists using SpotifyWebApi
+async function fetchTopArtists(range) {
+  try {
+    const response = await spotifyApi.getMyTopArtists({
+      time_range: range,
+      limit: 10,
     });
-  });
+
+    return response.body.items; // Return the items array from the response
+  } catch (error) {
+    throw { error: "Failed to fetch top artists" };
+  }
 }
 
-// Function to analyze listening habits and get top albums
-function analyzeListeningHabits(topTracks) {
+// Function to analyze listening habits and get top albums using SpotifyWebApi
+async function analyzeListeningHabits(topTracks) {
   const albumCounts = {};
 
   for (const track of topTracks) {
@@ -256,74 +175,60 @@ function analyzeListeningHabits(topTracks) {
   // Convert the albumCounts object to an array and sort it by frequency
   const sortedAlbums = Object.entries(albumCounts).sort((a, b) => b[1] - a[1]);
 
-  return sortedAlbums;
-}
-
-// Function to fetch album details by ID
-function fetchAlbumDetails(albumId) {
-  return new Promise((resolve, reject) => {
-    const authOptions = {
-      url: `https://api.spotify.com/v1/albums/${albumId}`,
-      headers: {
-        Authorization: "Bearer " + tokenData.access_token,
-      },
-      json: true,
-    };
-
-    request.get(authOptions, (error, response, body) => {
-      if (!error && response.statusCode === 200) {
-        resolve(body);
-      } else {
-        reject({ error: "Failed to fetch album details" });
+  // Fetch detailed information for the top albums
+  const topAlbums = await Promise.all(
+    sortedAlbums.slice(0, 10).map(async ([albumId]) => {
+      try {
+        const albumDetailResponse = await fetchAlbumDetails(albumId);
+        return albumDetailResponse;
+      } catch (error) {
+        return null; // Handle errors gracefully
       }
-    });
-  });
+    })
+  );
+
+  return topAlbums.filter((album) => album !== null); // Filter out null values
 }
 
-// Function to fetch genres for a list of artist IDs
-function fetchGenresForArtists(artistIds) {
-  return new Promise((resolve, reject) => {
-    const authOptions = {
-      url: "https://api.spotify.com/v1/artists",
-      qs: {
-        ids: artistIds.join(","), // Comma-separated list of artist IDs
-      },
-      headers: {
-        Authorization: "Bearer " + tokenData.access_token,
-      },
-      json: true,
-    };
-
-    request.get(authOptions, (error, response, body) => {
-      if (!error && response.statusCode === 200) {
-        const artistData = body.artists;
-        const genres = artistData.map((artist) => artist.genres);
-        resolve(genres);
-      } else {
-        reject({ error: "Failed to fetch artist genres" });
-      }
-    });
-  });
+async function fetchAlbumDetails(albumId) {
+  try {
+    const response = await spotifyApi.getAlbum(albumId);
+    return response.body;
+  } catch (error) {
+    console.error("Error fetching album details:", error);
+    return null; // Handle errors gracefully
+  }
 }
 
-// Route to get the user's top tracks, artists, and albums
+// Function to fetch genres for a list of artist IDs using SpotifyWebApi
+async function fetchGenresForArtists(artistIds) {
+  try {
+    const response = await spotifyApi.getArtists(artistIds);
+    const artistData = response.body.artists;
+    const genres = artistData.map((artist) => artist.genres);
+    return genres;
+  } catch (error) {
+    throw { error: "Failed to fetch artist genres" };
+  }
+}
+
 app.get("/top-data", async (req, res) => {
   try {
-    const range = req.query.range || "short_term"; // Default to short_term if range is not provided
+    const range = req.query.range || "short_term";
 
-    // Fetch top tracks, artists, and albums in parallel
-    const [topTracks, topArtists] = await Promise.all([
+    // Fetch top tracks and top artists in parallel
+    const [topTracksData, topArtists] = await Promise.all([
       fetchTopTracks(range),
       fetchTopArtists(range),
     ]);
 
     // Analyze listening habits to get top albums
-    const sortedAlbums = analyzeListeningHabits(topTracks.items);
+    const sortedAlbums = await analyzeListeningHabits(topTracksData);
 
     // Fetch detailed information for the top albums
     const topAlbums = [];
-    for (const [albumId] of sortedAlbums.slice(0, 10)) {
-      const albumDetailResponse = await fetchAlbumDetails(albumId);
+    for (const { id } of sortedAlbums.slice(0, 10)) {
+      const albumDetailResponse = await fetchAlbumDetails(id);
       if (!albumDetailResponse || albumDetailResponse.error) {
         continue; // Skip if there's an error fetching album details
       }
@@ -331,10 +236,8 @@ app.get("/top-data", async (req, res) => {
     }
 
     // Extract artist IDs from top tracks and artists
-    const topTrackArtistIds = topTracks.items.map(
-      (track) => track.artists[0].id
-    );
-    const topArtistIds = topArtists.items.map((artist) => artist.id);
+    const topTrackArtistIds = topTracksData.map((track) => track.artists[0].id);
+    const topArtistIds = topArtists.map((artist) => artist.id);
 
     // Combine both sets of artist IDs
     const allArtistIds = [...new Set([...topTrackArtistIds, ...topArtistIds])];
@@ -367,8 +270,8 @@ app.get("/top-data", async (req, res) => {
     const top5Genres = sortedGenres.slice(0, 5);
 
     res.json({
-      topTracks: topTracks.items,
-      topArtists: topArtists.items,
+      topTracks: topTracksData,
+      topArtists,
       topAlbums,
       artistGenres: top5Genres,
     });
@@ -377,6 +280,130 @@ app.get("/top-data", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+//allow users to search for tracks, artists or albums
+app.get("/search", async (req, res) => {
+  try {
+    const query = req.query.query; // User's search query
+    const type = req.query.type || "track"; // Default to track search
+
+    // Call a function to perform the search based on the type
+    let searchResults = [];
+
+    if (type === "track") {
+      searchResults = await searchTracks(query);
+    } else if (type === "artist") {
+      searchResults = await searchArtists(query);
+    } else if (type === "album") {
+      searchResults = await searchAlbums(query);
+    }
+
+    res.json({ results: searchResults });
+  } catch (error) {
+    console.error("Error searching:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+//Implement Search Functions
+async function searchTracks(query) {
+  try {
+    const response = await spotifyApi.searchTracks(query);
+    return response.body.tracks.items;
+  } catch (error) {
+    throw { error: "Failed to search for tracks" };
+  }
+}
+
+async function searchArtists(query) {
+  try {
+    const response = await spotifyApi.searchArtists(query);
+    return response.body.artists.items;
+  } catch (error) {
+    throw { error: "Failed to search for artists" };
+  }
+}
+
+async function searchAlbums(query) {
+  try {
+    const response = await spotifyApi.searchAlbums(query);
+    return response.body.albums.items;
+  } catch (error) {
+    throw { error: "Failed to search for albums" };
+  }
+}
+
+//Create Additional Routes for Details
+app.get("/track/:id", async (req, res) => {
+  try {
+    const trackId = req.params.id;
+    const trackDetails = await getTrackDetails(trackId);
+    res.json({ track: trackDetails });
+  } catch (error) {
+    console.error("Error fetching track details:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/artist/:id", async (req, res) => {
+  try {
+    const artistId = req.params.id;
+    const artistDetails = await getArtistDetails(artistId);
+    res.json({ artist: artistDetails });
+  } catch (error) {
+    console.error("Error fetching artist details:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/album/:id", async (req, res) => {
+  try {
+    const albumId = req.params.id;
+    const albumDetails = await getAlbumDetails(albumId);
+    res.json({ album: albumDetails });
+  } catch (error) {
+    console.error("Error fetching album details:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+//Implement Detail Fetching Functions:
+async function getTrackDetails(trackId) {
+  try {
+    const response = await spotifyApi.getTrack(trackId);
+    return response.body;
+  } catch (error) {
+    throw { error: "Failed to fetch track details" };
+  }
+}
+
+async function getArtistDetails(artistId) {
+  try {
+    const [artist, topTracks, albums] = await Promise.all([
+      spotifyApi.getArtist(artistId),
+      spotifyApi.getArtistTopTracks(artistId, "US"), // Change "US" to the desired country
+      spotifyApi.getArtistAlbums(artistId, { limit: 10 }),
+    ]);
+
+    return {
+      info: artist.body,
+      topTracks: topTracks.body.tracks,
+      albums: albums.body.items,
+    };
+  } catch (error) {
+    throw { error: "Failed to fetch artist details" };
+  }
+}
+
+async function getAlbumDetails(albumId) {
+  try {
+    const response = await spotifyApi.getAlbum(albumId);
+    return response.body;
+  } catch (error) {
+    throw { error: "Failed to fetch album details" };
+  }
+}
+
 
 // Handle all other routes by serving the React app
 app.get("*", (req, res) => {

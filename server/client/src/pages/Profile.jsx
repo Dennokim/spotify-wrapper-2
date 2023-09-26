@@ -6,9 +6,11 @@ const Profile = () => {
     topTracks: [],
     topArtists: [],
     topAlbums: [],
-    artistGenres: [], // Added state to store top genres
+    artistGenres: [],
   });
-  const [range, setRange] = useState("short_term"); // Default time range
+  const [range, setRange] = useState("short_term");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
 
   useEffect(() => {
     // Function to fetch top data for the selected time range
@@ -45,6 +47,21 @@ const Profile = () => {
     fetchTopData();
     fetchUserDataAndPlaylists();
   }, [range]);
+
+  // Function to handle user's search and fetch search results
+  const handleSearch = async () => {
+    try {
+      const response = await fetch(`/search?query=${searchQuery}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSearchResults(data.results);
+      } else {
+        console.error("Failed to fetch search results");
+      }
+    } catch (error) {
+      console.error("Error fetching search results:", error);
+    }
+  };
 
   return (
     <div>
@@ -104,6 +121,30 @@ const Profile = () => {
               <li key={index}>{genre}</li>
             ))}
           </ol>
+
+          {/* Search Input */}
+          <div>
+            <h2>Search</h2>
+            <input
+              type="text"
+              placeholder="Enter a song, artist, or album"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <button onClick={handleSearch}>Search</button>
+          </div>
+
+          {/* Display Search Results */}
+          {searchResults.length > 0 && (
+            <div>
+              <h2>Search Results</h2>
+              <ul>
+                {searchResults.map((result, index) => (
+                  <li key={index}>{result.name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>
