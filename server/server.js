@@ -4,6 +4,7 @@ const path = require("path");
 const dotenv = require("dotenv");
 const SpotifyWebApi = require("spotify-web-api-node");
 const querystring = require("querystring");
+const cors = require('cors');
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ const app = express();
 // Set up the middleware
 app.use(express.static(path.join(__dirname, "client", "build")));
 app.use(cookieParser());
+app.use(cors());
 
 // Function to generate a random string
 const generateRandomString = function (length) {
@@ -373,7 +375,31 @@ app.get("/album/:id", async (req, res) => {
 async function getTrackDetails(trackId) {
   try {
     const response = await spotifyApi.getTrack(trackId);
-    return response.body;
+
+    // Extract additional details
+    const track = response.body;
+
+    // Extract artists' names
+    const artists = track.artists.map((artist) => artist.name);
+
+    // Extract the album details
+    const albumDetails = {
+      name: track.album.name,
+      releaseYear: track.album.release_date.split("-")[0], // Get the year from the release date
+    };
+
+    // Construct the track details object
+    const trackDetails = {
+      id: track.id,
+      name: track.name,
+      profileImage: track.album.images.length > 0 ? track.album.images[0].url : null,
+      duration: track.duration_ms, // Duration in milliseconds
+      releaseYear: albumDetails.releaseYear,
+      artists: artists,
+      album: albumDetails,
+    };
+
+    return trackDetails;
   } catch (error) {
     throw { error: "Failed to fetch track details" };
   }
@@ -382,14 +408,18 @@ async function getTrackDetails(trackId) {
 // Route to get details of a specific artist by its ID
 async function getArtistDetails(artistId) {
   try {
-    const [artist, topTracks, albums] = await Promise.all([
+    const [artist, topTracks, albums, followers] = await Promise.all([
       spotifyApi.getArtist(artistId),
       spotifyApi.getArtistTopTracks(artistId, "US"), // Change "US" to the desired country
       spotifyApi.getArtistAlbums(artistId, { limit: 10 }),
+      spotifyApi.getArtistFollowers(artistId),
     ]);
 
     return {
-      info: artist.body,
+      id: artist.body.id,
+      name: artist.body.name,
+      profileImage: artist.body.images.length > 0 ? artist.body.images[0].url : null,
+      followers: followers.body.followers.total,
       topTracks: topTracks.body.tracks,
       albums: albums.body.items,
     };
@@ -402,12 +432,43 @@ async function getArtistDetails(artistId) {
 async function getAlbumDetails(albumId) {
   try {
     const response = await spotifyApi.getAlbum(albumId);
-    return response.body;
+
+    // Extract additional details
+    const album = response.body;
+
+    // Extract artists' names
+    const artists = album.artists.map((artist) => artist.name);
+
+    // Calculate the total duration of all tracks on the album
+    const totalDurationMs = album.tracks.items.reduce(
+      (total, track) => total + track.duration_ms,
+      0
+    );
+
+    // Convert the total duration to minutes and seconds
+    const totalDurationMinutes = Math.floor(totalDurationMs / 60000);
+    const totalDurationSeconds = Math.floor((totalDurationMs % 60000) / 1000);
+
+    // Construct the album details object
+    const albumDetails = {
+      id: album.id,
+      name: album.name,
+      profileImage: album.images.length > 0 ? album.images[0].url : null,
+      releaseYear: album.release_date.split("-")[0], // Get the year from the release date
+      artists: artists,
+      totalDuration: `${totalDurationMinutes}:${totalDurationSeconds}`,
+      songs: album.tracks.items.map((track) => ({
+        id: track.id,
+        name: track.name,
+        duration: track.duration_ms,
+      })),
+    };
+
+    return albumDetails;
   } catch (error) {
     throw { error: "Failed to fetch album details" };
   }
 }
-
 
 // Handle all other routes by serving the React app
 app.get("*", (req, res) => {
