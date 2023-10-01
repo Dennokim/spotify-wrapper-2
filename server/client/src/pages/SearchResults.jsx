@@ -10,10 +10,13 @@ import {
   Dropdown,
 } from "react-bootstrap";
 
+
+
+
 export default function SearchResults() {
   const [searchInput, setSearchInput] = useState("");
   const [accessToken, setAccessToken] = useState("");
-  const [searchType, setSearchType] = useState("artist"); // Default search type
+  const [searchType, setSearchType] = useState("track"); // Default search type to "track"
   const [searchResults, setSearchResults] = useState([]);
   const SEARCH_DISPLAY_TEXT = "Displaying results for: ";
 
@@ -58,19 +61,19 @@ export default function SearchResults() {
             "&type=playlist";
           itemType = "playlists";
           break;
-        case "track":
-          endpoint =
-            "https://api.spotify.com/v1/search?q=" +
-            searchInput +
-            "&type=track";
-          itemType = "tracks";
-          break;
         case "album":
           endpoint =
             "https://api.spotify.com/v1/search?q=" +
             searchInput +
             "&type=album";
           itemType = "albums";
+          break;
+        case "track":
+          endpoint =
+            "https://api.spotify.com/v1/search?q=" +
+            searchInput +
+            "&type=track";
+          itemType = "tracks";
           break;
         default:
           break;
