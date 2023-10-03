@@ -5,6 +5,7 @@ const dotenv = require("dotenv");
 const SpotifyWebApi = require("spotify-web-api-node");
 const querystring = require("querystring");
 const cors = require('cors');
+const axios = require('axios');
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ const app = express();
 app.use(express.static(path.join(__dirname, "client", "build")));
 app.use(cookieParser());
 app.use(cors());
+app.use(express.json());
 
 // Function to generate a random string
 const generateRandomString = function (length) {
@@ -283,192 +285,34 @@ app.get("/top-data", async (req, res) => {
   }
 });
 
-//allow users to search for tracks, artists or albums
-app.get("/search", async (req, res) => {
+// Your API endpoint for handling Spotify search requests
+app.get('/api/search', async (req, res) => {
   try {
-    const query = req.query.query; // User's search query
-    const type = req.query.type || "track"; // Default to track search
+    const { q } = req.query;
 
-    // Call a function to perform the search based on the type
-    let searchResults = [];
-
-    if (type === "track") {
-      searchResults = await searchTracks(query);
-    } else if (type === "artist") {
-      searchResults = await searchArtists(query);
-    } else if (type === "album") {
-      searchResults = await searchAlbums(query);
-    }
-
-    res.json({ results: searchResults });
-  } catch (error) {
-    console.error("Error searching:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-//Implement Search Functions
-async function searchTracks(query) {
-  try {
-    const response = await spotifyApi.searchTracks(query);
-    return response.body.tracks.items;
-  } catch (error) {
-    throw { error: "Failed to search for tracks" };
-  }
-}
-
-async function searchArtists(query) {
-  try {
-    const response = await spotifyApi.searchArtists(query);
-    return response.body.artists.items;
-  } catch (error) {
-    throw { error: "Failed to search for artists" };
-  }
-}
-
-async function searchAlbums(query) {
-  try {
-    const response = await spotifyApi.searchAlbums(query);
-    return response.body.albums.items;
-  } catch (error) {
-    throw { error: "Failed to search for albums" };
-  }
-}
-
-// Route to get details of a specific track by its ID
-app.get("/track/:id", async (req, res) => {
-  try {
-    const trackId = req.params.id;
-    const trackDetails = await getTrackDetails(trackId);
-    res.json({ track: trackDetails });
-  } catch (error) {
-    console.error("Error fetching track details:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// Route to get details of a specific artist by their ID
-app.get("/artist/:id", async (req, res) => {
-  try {
-    const artistId = req.params.id;
-    const artistDetails = await getArtistDetails(artistId);
-    res.json({ artist: artistDetails });
-  } catch (error) {
-    console.error("Error fetching artist details:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// Route to get details of a specific album by its ID
-app.get("/album/:id", async (req, res) => {
-  try {
-    const albumId = req.params.id;
-    const albumDetails = await getAlbumDetails(albumId);
-    res.json({ album: albumDetails });
-  } catch (error) {
-    console.error("Error fetching album details:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// Route to get details of a specific track by its ID
-async function getTrackDetails(trackId) {
-  try {
-    const response = await spotifyApi.getTrack(trackId);
-
-    // Extract additional details
-    const track = response.body;
-
-    // Extract artists' names
-    const artists = track.artists.map((artist) => artist.name);
-
-    // Extract the album details
-    const albumDetails = {
-      name: track.album.name,
-      releaseYear: track.album.release_date.split("-")[0], // Get the year from the release date
+    const options = {
+      method: 'GET',
+      url: 'https://spotify23.p.rapidapi.com/search/',
+      params: {
+        q,
+        type: 'multi',
+        offset: '0',
+        limit: '10',
+        numberOfTopResults: '5'
+      },
+      headers: {
+        'X-RapidAPI-Key': '4f484c1165msh4c691a3476e9f2bp1746e1jsnb951a6563ff6',
+        'X-RapidAPI-Host': 'spotify23.p.rapidapi.com'
+      }
     };
 
-    // Construct the track details object
-    const trackDetails = {
-      id: track.id,
-      name: track.name,
-      profileImage: track.album.images.length > 0 ? track.album.images[0].url : null,
-      duration: track.duration_ms, // Duration in milliseconds
-      releaseYear: albumDetails.releaseYear,
-      artists: artists,
-      album: albumDetails,
-    };
-
-    return trackDetails;
+    const response = await axios.request(options);
+    res.json(response.data);
   } catch (error) {
-    throw { error: "Failed to fetch track details" };
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred while processing your request.' });
   }
-}
-
-// Route to get details of a specific artist by its ID
-async function getArtistDetails(artistId) {
-  try {
-    const [artist, topTracks, albums, followers] = await Promise.all([
-      spotifyApi.getArtist(artistId),
-      spotifyApi.getArtistTopTracks(artistId, "US"), // Change "US" to the desired country
-      spotifyApi.getArtistAlbums(artistId, { limit: 10 }),
-      spotifyApi.getArtistFollowers(artistId),
-    ]);
-
-    return {
-      id: artist.body.id,
-      name: artist.body.name,
-      profileImage: artist.body.images.length > 0 ? artist.body.images[0].url : null,
-      followers: followers.body.followers.total,
-      topTracks: topTracks.body.tracks,
-      albums: albums.body.items,
-    };
-  } catch (error) {
-    throw { error: "Failed to fetch artist details" };
-  }
-}
-
-// Route to get details of a specific album by its ID
-async function getAlbumDetails(albumId) {
-  try {
-    const response = await spotifyApi.getAlbum(albumId);
-
-    // Extract additional details
-    const album = response.body;
-
-    // Extract artists' names
-    const artists = album.artists.map((artist) => artist.name);
-
-    // Calculate the total duration of all tracks on the album
-    const totalDurationMs = album.tracks.items.reduce(
-      (total, track) => total + track.duration_ms,
-      0
-    );
-
-    // Convert the total duration to minutes and seconds
-    const totalDurationMinutes = Math.floor(totalDurationMs / 60000);
-    const totalDurationSeconds = Math.floor((totalDurationMs % 60000) / 1000);
-
-    // Construct the album details object
-    const albumDetails = {
-      id: album.id,
-      name: album.name,
-      profileImage: album.images.length > 0 ? album.images[0].url : null,
-      releaseYear: album.release_date.split("-")[0], // Get the year from the release date
-      artists: artists,
-      totalDuration: `${totalDurationMinutes}:${totalDurationSeconds}`,
-      songs: album.tracks.items.map((track) => ({
-        id: track.id,
-        name: track.name,
-        duration: track.duration_ms,
-      })),
-    };
-
-    return albumDetails;
-  } catch (error) {
-    throw { error: "Failed to fetch album details" };
-  }
-}
+});
 
 // Handle all other routes by serving the React app
 app.get("*", (req, res) => {

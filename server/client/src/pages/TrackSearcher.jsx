@@ -23,10 +23,11 @@ const SearchTracks = () => {
       });
   }, []);
 
-  const handleSearch = async () => {
+  const handleSearchTracks = async () => {
     try {
+      const encodedSearchKeyword = encodeURIComponent(searchKeyword);
       const response = await fetch(
-        `${endpoint}/search?q=${searchKeyword}&type=${searchType}`,
+        `${endpoint}/search?q=${encodedSearchKeyword}&type=track`,
         {
           method: "GET",
           headers: {
@@ -35,13 +36,92 @@ const SearchTracks = () => {
         }
       );
       const res = await response.json();
-
-      // Check if the response contains the selected searchType
-      const data = res[searchType + "s"] ? res[searchType + "s"].items : [];
-
+      const data = res.tracks ? res.tracks.items : [];
       setSearchResults(data);
     } catch (error) {
-      console.error(`Error searching for ${searchType}s: `, error);
+      console.error("Error searching for tracks: ", error);
+    }
+  };
+
+  const handleSearchArtists = async () => {
+    try {
+      const encodedSearchKeyword = encodeURIComponent(searchKeyword);
+      const response = await fetch(
+        `${endpoint}/search?q=${encodedSearchKeyword}&type=artist`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "Authorization",
+          },
+        }
+      );
+      const res = await response.json();
+      const data = res.artists ? res.artists.items : [];
+      setSearchResults(data);
+    } catch (error) {
+      console.error("Error searching for artists: ", error);
+    }
+  };
+
+  const handleSearchAlbums = async () => {
+    try {
+      const encodedSearchKeyword = encodeURIComponent(searchKeyword);
+      const response = await fetch(
+        `${endpoint}/search?q=${encodedSearchKeyword}&type=album`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+      const res = await response.json();
+      const data = res.albums ? res.albums.items : [];
+      setSearchResults(data);
+    } catch (error) {
+      console.error("Error searching for albums: ", error);
+    }
+  };
+
+  const handleSearchPlaylists = async () => {
+    try {
+      const encodedSearchKeyword = encodeURIComponent(searchKeyword);
+      const response = await fetch(
+        `${endpoint}/search?q=${encodedSearchKeyword}&type=playlist`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+      const res = await response.json();
+      const data = res.playlists ? res.playlists.items : [];
+      setSearchResults(data);
+    } catch (error) {
+      console.error("Error searching for playlists: ", error);
+    }
+  };
+
+  const handleSearch = async () => {
+    switch (searchType) {
+      case "track":
+        handleSearchTracks();
+        break;
+      case "artist":
+        handleSearchArtists();
+        break;
+      case "album":
+        handleSearchAlbums();
+        break;
+      case "playlist":
+        handleSearchPlaylists();
+        break;
+      default:
+        // Handle other search types or errors
+        break;
     }
   };
 
@@ -50,7 +130,58 @@ const SearchTracks = () => {
     if (searchKeyword) {
       handleSearch();
     }
-  }, [searchType]); // Run this effect when searchType changes
+  }, [searchType, searchKeyword]); // Run this effect when searchType or searchKeyword changes
+
+  const renderCardContent = (item) => {
+    console.log(`Search type: ${searchType}`);
+    console.log(`Search results: `, searchResults);
+
+    switch (searchType) {
+      case "track":
+        return (
+          <>
+            <Card.Img variant="top" src={item.album.images[0].url} />
+            <Card.Body>
+              <Card.Title>{item.name}</Card.Title>
+              <Card.Text>{item.artists[0].name}</Card.Text>
+            </Card.Body>
+          </>
+        );
+      case "artist":
+        return (
+          <>
+            <Card.Img
+              key={item.id}
+              variant="top"
+              src={(item.images && item.images[0].url) || ""}
+            />
+            <Card.Body>
+              <Card.Title>{item.name}</Card.Title>
+            </Card.Body>
+          </>
+        );
+      case "album":
+        return (
+          <>
+            <Card.Img variant="top" src={item.images[0].url} />
+            <Card.Body>
+              <Card.Title>{item.name}</Card.Title>
+            </Card.Body>
+          </>
+        );
+      case "playlist":
+        return (
+          <>
+            <Card.Img variant="top" src={item.images[0].url} />
+            <Card.Body>
+              <Card.Title>{item.name}</Card.Title>
+            </Card.Body>
+          </>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div>
@@ -77,28 +208,7 @@ const SearchTracks = () => {
       <div className="mt-4">
         {searchResults.map((item) => (
           <Card key={item.id} style={{ width: "18rem" }}>
-            <Card.Img
-              variant="top"
-              src={
-                searchType === "track"
-                  ? item.album.images[0].url
-                  : searchType === "artist"
-                  ? (item.images && item.images[0].url) || "" // Handle images for artists
-                  : "" // Handle images for albums and playlists accordingly
-              }
-            />
-            <Card.Body>
-              <Card.Title>
-                {searchType === "track"
-                  ? item.name
-                  : searchType === "artist"
-                  ? item.name
-                  : item.name}
-              </Card.Title>
-              {searchType === "track" && (
-                <Card.Text>{item.artists[0].name}</Card.Text>
-              )}
-            </Card.Body>
+            {renderCardContent(item)}
           </Card>
         ))}
       </div>

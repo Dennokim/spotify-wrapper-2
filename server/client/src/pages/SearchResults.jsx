@@ -10,9 +10,6 @@ import {
   Dropdown,
 } from "react-bootstrap";
 
-
-
-
 export default function SearchResults() {
   const [searchInput, setSearchInput] = useState("");
   const [accessToken, setAccessToken] = useState("");
@@ -33,6 +30,29 @@ export default function SearchResults() {
       });
   }, []);
 
+  const endpoint = "https://api.spotify.com/v1";
+
+  async function searchTracks(searchInput) {
+    try {
+      const encodedSearchKeyword = encodeURIComponent(searchInput);
+      const response = await fetch(
+        `${endpoint}/search?q=${encodedSearchKeyword}&type=track`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+      const res = await response.json();
+      const data = res.tracks ? res.tracks.items : [];
+      return data;
+    } catch (error) {
+      console.error("Error searching for tracks: ", error);
+      return [];
+    }
+  }
+
   async function search() {
     try {
       const searchParameters = {
@@ -40,6 +60,7 @@ export default function SearchResults() {
         headers: {
           "Content-type": "application/json",
           Authorization: "Bearer " + accessToken,
+          Accept: "application/json", // Added this header
         },
       };
 
@@ -68,15 +89,12 @@ export default function SearchResults() {
             "&type=album";
           itemType = "albums";
           break;
-        case "track":
-          endpoint =
-            "https://api.spotify.com/v1/search?q=" +
-            searchInput +
-            "&type=track";
-          itemType = "tracks";
-          break;
-        default:
-          break;
+          case "track":
+            const trackData = await searchTracks(searchInput);
+            setSearchResults(trackData);
+            return;
+          default:
+            break;
       }
 
       const searchData = await fetch(endpoint, searchParameters)
@@ -120,7 +138,8 @@ export default function SearchResults() {
                 search();
               }
             }}
-            onChange={(event) => setSearchInput(event.target.value)}
+            onChange={(event) => setSearchInput(event.target
+.value)}
           />
           <Button onClick={search}>Search</Button>
         </InputGroup>
